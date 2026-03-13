@@ -11,6 +11,7 @@ from services.materials_processor import process_material
 from services.pdf_reader import read_pdf
 from services.knowledge_loader import load_knowledge
 from services.legal_analysis_prompt import LEGAL_ANALYSIS_PROMPT
+from services.passport_pipeline import process_passport
 
 from telegram import Update, ReplyKeyboardRemove
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
@@ -90,86 +91,6 @@ def create_pdf(text, case_name):
     c.save()
 
     return path
-
-
-# -----------------------------------
-# OCR через GPT Vision
-# -----------------------------------
-
-def parse_passport_from_images(image_paths):
-
-    images = []
-
-    for path in image_paths:
-
-        with open(path, "rb") as img:
-
-            base64_image = base64.b64encode(img.read()).decode("utf-8")
-
-        images.append(
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/jpeg;base64,{base64_image}",
-                    "detail": "high"
-                }
-            }
-        )
-
-    response = client.chat.completions.create(
-
-        model="gpt-4o-mini",
-        temperature=0,
-
-
-        messages=[
-            {
-                "role": "system",
-                "content": """
-            Ты система распознавания российских паспортов.
-
-            Из изображений извлеки данные и верни строго в формате:
-
-            ФИО:
-            Пол:
-            Дата рождения:
-            Место рождения:
-            Серия:
-            Номер:
-            Кем выдан:
-            Дата выдачи:
-            Код подразделения:
-            Адрес регистрации:
-
-            ВАЖНО:
-
-            Не используй капслок.
-
-            Форматируй текст нормально:
-
-            ФИО — Каждое слово с большой буквы
-            пример: Псов Алексей Олегович
-
-            Пол — Муж / Жен
-
-            Адрес — обычный текст
-            пример: ул. Мира, дом 10, кв. 5, г. Москва
-
-            Органы выдачи — обычный регистр
-            пример: Управлением внутренних дел г. Южно-Сахалинска
-            """
-            },
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "Извлеки данные паспорта"},
-                    *images
-                ]
-            }
-        ]
-    )
-
-    return response.choices[0].message.content
 
 
 
@@ -488,7 +409,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         context.user_data["state"] = "WAIT_PASSPORT"
-        context.user_data["passport_images"] = []
+        context.user_data["passport_files"] = []
 
         await update.message.reply_text(
             "Пришлите 2 фотографии паспорта:\n"
@@ -1061,26 +982,42 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("state") == "WAIT_PASSPORT":
 
         folder = f"cases/{case}/passport"
-
         os.makedirs(folder, exist_ok=True)
 
-        photos = context.user_data.get("passport_images", [])
+        files = context.user_data.get("passport_files", [])
 
-        photo = update.message.photo[-1]
+        # если пользователь отправил фото
+        if update.message.photo:
 
-        file = await photo.get_file()
+            photo = update.message.photo[-1]
 
-        file_name = f"passport_{len(photos)+1}.jpg"
+            file = await photo.get_file()
 
-        path = f"{folder}/{file_name}"
+            file_name = f"passport_{len(files)+1}.jpg"
 
-        await file.download_to_drive(path)
+            path = f"{folder}/{file_name}"
 
-        photos.append(path)
+            await file.download_to_drive(path)
 
-        context.user_data["passport_images"] = photos
+            files.append(path)
 
-        if len(photos) < 2:
+        # если отправлен файл (pdf / jpg / png)
+        elif update.message.document:
+
+            file = await update.message.document.get_file()
+
+            file_name = update.message.document.file_name
+
+            path = f"{folder}/{file_name}"
+
+            await file.download_to_drive(path)
+
+            files.append(path)
+
+        context.user_data["passport_files"] = files
+
+        # если пока только 1 фото
+        if len(files) == 1 and not files[0].lower().endswith(".pdf"):
 
             await update.message.reply_text(
                 "Фото получено. Пришлите вторую страницу паспорта."
@@ -1088,13 +1025,13 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             return
 
-        context.user_data["state"] = None
-
         await update.message.reply_text(
             "Паспорт получен. Начинаю распознавание..."
         )
 
-        passport_data = parse_passport_from_images(photos)
+        case_folder = f"cases/{case}"
+
+        passport_data = process_passport(files, case_folder)
 
         context.user_data["passport_data"] = passport_data
         context.user_data["state"] = "WAIT_PASSPORT_CONFIRM"
