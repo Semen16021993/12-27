@@ -9,6 +9,8 @@ from services.case_context_builder import build_case_context
 from services.materials_ocr import ocr_image
 from services.materials_processor import process_material
 from services.pdf_reader import read_pdf
+from services.knowledge_loader import load_knowledge
+from services.legal_analysis_prompt import LEGAL_ANALYSIS_PROMPT
 
 from telegram import Update, ReplyKeyboardRemove
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
@@ -31,6 +33,10 @@ import uuid
 
 
 client = OpenAI(api_key=OPENAI_API_KEY)
+knowledge_base = load_knowledge()
+
+print("База знаний загружена")
+print(len(knowledge_base))
 
 
 # регистрируем шрифт один раз
@@ -40,30 +46,6 @@ pdfmetrics.registerFont(
         "/System/Library/Fonts/Supplemental/Times New Roman.ttf"
     )
 )
-
-
-# -----------------------------------
-# чтение PDF
-# -----------------------------------
-
-def read_pdf(file_path):
-
-    text = ""
-
-    try:
-        reader = PdfReader(file_path)
-
-        for page in reader.pages:
-
-            page_text = page.extract_text()
-
-            if page_text:
-                text += page_text
-
-    except Exception:
-        return ""
-
-    return text
 
 
 # -----------------------------------
@@ -448,6 +430,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
+
+    # -----------------------------------
+    # загрузка материалов дела
+    # -----------------------------------
+
+    if user_text == "материалы дела":
+
+        context.user_data["state"] = "WAIT_MATERIALS"
+
+        await update.message.reply_text(
+            "Прикрепите материалы дела.\n\n"
+            "Можно отправить несколько файлов подряд:\n"
+            "Когда закончите — напишите 'готово'."
+        )
+
+        return
+
     # -----------------------------------
     # загрузка опросника
     # -----------------------------------
@@ -514,9 +513,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # анализ материалов
     # -----------------------------------
 
-    if "посмотри материалы" in user_text:
+    if user_text == "анализ материалов":
+
+        await update.message.reply_text("Начинаю анализ материалов дела...")
 
         materials_folder = f"cases/{case}/materials"
+        questionnaire_path = f"cases/{case}/materials/questionnaire.txt"
+        questionnaire_text = ""
+
+        if os.path.exists(questionnaire_path):
+            with open(questionnaire_path, "r", encoding="utf-8") as f:
+                questionnaire_text = f.read()
 
         if not os.path.exists(materials_folder):
             await update.message.reply_text("Материалы дела отсутствуют.")
@@ -572,11 +579,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 messages=[
                     {
                         "role": "system",
-                        "content": "Ты юрист по делам 12.27 ч.2 КоАП РФ. Проанализируй материалы."
+                        "content": """
+                    Ты юрист по делам ст.12.27 ч.2 КоАП РФ.
+                    Проанализируй представленный фрагмент материалов дела.
+                    """
                     },
                     {
                         "role": "user",
-                        "content": chunk
+                        "content": f"""
+                    questionnaire:
+
+                    {questionnaire_text}
+
+                    materials_text:
+
+                    {chunk}
+                    """
                     }
                 ]
             )
@@ -586,16 +604,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # финальный вывод
 
+        analysis_text = "\n\n".join(analyses)
+
         final_response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {
                     "role": "system",
-                    "content": "Сделай итоговый юридический анализ материалов дела."
+                    "content": f"""
+        {LEGAL_ANALYSIS_PROMPT}
+
+        Дополнительно используй профессиональный опыт из базы знаний:
+
+        {knowledge_base}
+        """
                 },
                 {
                     "role": "user",
-                    "content": "\n\n".join(analyses)
+                    "content": f"""
+        questionnaire:
+
+        {questionnaire_text}
+
+        materials_text:
+
+        {analysis_text}
+        """
                 }
             ]
         )
@@ -633,14 +667,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
     
+    # -----------------------------------
+    # завершение загрузки материалов
+    # -----------------------------------
 
+    if context.user_data.get("state") == "WAIT_MATERIALS" and user_text == "готово":
+
+        context.user_data["state"] = None
+
+        await update.message.reply_text(
+            "Загрузка материалов завершена.",
+            reply_markup=main_keyboard()
+        )
+
+        return
     
-
     # -----------------------------------
     # кнопка назад
     # -----------------------------------
 
     if user_text == "назад":
+
+        context.user_data["state"] = None
 
         await update.message.reply_text(
             "Главное меню:",
@@ -648,7 +696,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         return
-    
 
     # -----------------------------------
     # выбор конкретного ходатайства
@@ -807,18 +854,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
 
         response = client.chat.completions.create(
-
             model="gpt-4o-mini",
-
             messages=[
-                {
+                {   
                     "role": "system",
-                    "content": f"Ты юридический помощник по делам 12.27 КоАП РФ. Сейчас рассматривается дело: {case}"
+                    "content": """
+        Ты юрист по делам ст.12.27 ч.2 КоАП РФ.
+
+        Проанализируй представленный фрагмент материалов дела.
+
+        Выдели:
+        — фактические обстоятельства
+        — важные детали ДТП
+        — возможные противоречия
+        — доказательства, подтверждающие или опровергающие версию событий
+        """
                 },
-                {
-                    "role": "user",
-                    "content": user_text
-                }
             ]
         )
 
@@ -945,76 +996,66 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
-
     # -----------------------------------
-    # загрузка материалов (документы)
-    # -----------------------------------
-
-    folder = f"cases/{case}/materials"
-
-    os.makedirs(folder, exist_ok=True)
-
-
-    if update.message.document:
-
-        file = await update.message.document.get_file()
-
-        file_name = os.path.basename(
-            update.message.document.file_name or "document"
-        )
-
-        path = f"{folder}/{file_name}"
-
-        await file.download_to_drive(path)
-
-
-        # OCR материалов
-
-        case_folder = f"cases/{case}"
-
-        process_material(path, case_folder)
-
-        build_case_context(case)
-
-
-        await update.message.reply_text(
-            f"Файл сохранен и распознан: {file_name}"
-        )
-
-        return
-
-
-    # -----------------------------------
-    # загрузка материалов (фото)
+    # принимаем материалы дела
     # -----------------------------------
 
-    if update.message.photo:
+    if context.user_data.get("state") == "WAIT_MATERIALS":
 
-        photo = update.message.photo[-1]
+        folder = f"cases/{case}/materials"
+        os.makedirs(folder, exist_ok=True)
 
-        file = await photo.get_file()
+        # документ
+        if update.message.document:
 
-        file_name = f"material_{uuid.uuid4().hex}.jpg"
+            file = await update.message.document.get_file()
 
-        path = f"{folder}/{file_name}"
+            file_name = os.path.basename(
+                update.message.document.file_name or "document"
+            )
 
-        await file.download_to_drive(path)
+            path = f"{folder}/{file_name}"
 
+            await file.download_to_drive(path)
 
-        case_folder = f"cases/{case}"
+            case_folder = f"cases/{case}"
 
-        process_material(path, case_folder)
+            process_material(path, case_folder)
 
-        build_case_context(case)
+            build_case_context(case)
 
+            await update.message.reply_text(
+                f"Материал сохранен и распознан: {file_name}"
+            )
 
-        await update.message.reply_text(
-            "Фото материала сохранено и распознано."
-        )
+            return
 
-        return
+        # фото
 
+        if update.message.photo:
 
+            photo = update.message.photo[-1]
+
+            file = await photo.get_file()
+
+            file_name = f"material_{uuid.uuid4().hex}.jpg"
+
+            path = f"{folder}/{file_name}"
+
+            await file.download_to_drive(path)
+
+            case_folder = f"cases/{case}"
+
+            process_material(path, case_folder)
+
+            build_case_context(case)
+
+            await update.message.reply_text(
+                "Фото материала сохранено и распознано."
+            )
+
+            return
+    
 
 # -----------------------------------
 # запуск
