@@ -47,6 +47,13 @@ pdfmetrics.registerFont(
     )
 )
 
+pdfmetrics.registerFont(
+    TTFont(
+        "TimesNewRomanBold",
+        "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf"
+    )
+)
+
 
 # -----------------------------------
 # создание PDF
@@ -376,6 +383,41 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         return
+    
+    # -----------------------------------
+    # выбрать клиента
+    # -----------------------------------
+
+    if user_text == "выбрать клиента":
+
+        cases_dir = "cases"
+
+        if not os.path.exists(cases_dir):
+
+            await update.message.reply_text(
+                "Папка клиентов не найдена."
+            )
+            return
+
+        clients = [
+            name for name in os.listdir(cases_dir)
+            if os.path.isdir(os.path.join(cases_dir, name))
+        ]
+
+        if not clients:
+
+            await update.message.reply_text(
+                "Клиенты не найдены."
+            )
+            return
+
+        clients_list = "\n".join(clients)
+
+        context.user_data["state"] = "WAIT_CLIENT_SELECT"
+
+        await update.message.reply_text(clients_list)
+
+        return
 
 
     # -----------------------------------
@@ -403,6 +445,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
+    # -----------------------------------
+    # выбор клиента из списка
+    # -----------------------------------
+
+    if context.user_data.get("state") == "WAIT_CLIENT_SELECT":
+
+        client_name = update.message.text.strip()
+
+        path = f"cases/{client_name}"
+
+        if not os.path.exists(path):
+
+            await update.message.reply_text(
+                "Такого клиента нет. Попробуйте снова."
+            )
+            return
+
+        context.user_data["case"] = client_name
+        context.user_data["state"] = None
+
+        await update.message.reply_text(
+            f"Выбран клиент: {client_name}",
+            reply_markup=main_keyboard()
+        )
+
+        return
 
     # -----------------------------------
     # загрузка паспорта
@@ -515,96 +583,56 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if user_text == "анализ материалов":
 
-        await update.message.reply_text("Начинаю анализ материалов дела...")
+        await update.message.reply_text(
+            "Приступаю к анализу материалов дела.\n"
+            "Пожалуйста подождите, это может занять до 30–60 секунд."
+        )
 
         materials_folder = f"cases/{case}/materials"
         questionnaire_path = f"cases/{case}/materials/questionnaire.txt"
-        questionnaire_text = ""
+        if not os.path.exists(questionnaire_path):
 
-        if os.path.exists(questionnaire_path):
-            with open(questionnaire_path, "r", encoding="utf-8") as f:
-                questionnaire_text = f.read()
+            await update.message.reply_text(
+                "Опросник не найден. Сначала загрузите файл опросника."
+            )
+            return
+
+        with open(questionnaire_path, "r", encoding="utf-8") as f:
+
+            questionnaire_text = f.read()
+
+        if not questionnaire_text.strip():
+
+            await update.message.reply_text(
+                "Файл опросника пуст. Проверьте загрузку."
+            )
+            return
 
         if not os.path.exists(materials_folder):
             await update.message.reply_text("Материалы дела отсутствуют.")
             return
 
-        texts = []
+        materials_text_path = f"cases/{case}/materials_text.txt"
 
-        files = os.listdir(materials_folder)
+        if not os.path.exists(materials_text_path):
 
-        for file in files:
-
-            path = f"{materials_folder}/{file}"
-
-            if file.lower().endswith(".pdf"):
-
-                text = read_pdf(path)
-
-                if text:
-                    texts.append(text)
-
-            if file.lower().endswith((".jpg", ".jpeg", ".png")):
-
-                text = ocr_image(path)
-
-                if text:
-                    texts.append(text)
-
-        if not texts:
-
-            await update.message.reply_text("Не удалось извлечь текст из материалов.")
+            await update.message.reply_text(
+                "Материалы дела не обработаны. Сначала загрузите материалы."
+            )
             return
 
+        with open(materials_text_path, "r", encoding="utf-8") as f:
 
-        full_text = "\n\n".join(texts)
+            full_text = f.read()
 
+        if not full_text.strip():
 
-        # режем текст на куски
-        chunk_size = 12000
-
-        chunks = [
-            full_text[i:i+chunk_size]
-            for i in range(0, len(full_text), chunk_size)
-        ]
-
-
-        analyses = []
-
-
-        for chunk in chunks:
-
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": """
-                    Ты юрист по делам ст.12.27 ч.2 КоАП РФ.
-                    Проанализируй представленный фрагмент материалов дела.
-                    """
-                    },
-                    {
-                        "role": "user",
-                        "content": f"""
-                    questionnaire:
-
-                    {questionnaire_text}
-
-                    materials_text:
-
-                    {chunk}
-                    """
-                    }
-                ]
+            await update.message.reply_text(
+                "Файл материалов пуст. Проверьте загрузку документов."
             )
-
-            analyses.append(response.choices[0].message.content)
-
-
-        # финальный вывод
-
-        analysis_text = "\n\n".join(analyses)
+            return
+        
+        analysis_text = full_text
 
         final_response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -634,9 +662,85 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
         )
 
-        await update.message.reply_text(
-            final_response.choices[0].message.content
+        analysis_result = final_response.choices[0].message.content
+
+
+        defense_folder = f"cases/{case}/defense"
+        os.makedirs(defense_folder, exist_ok=True)
+
+        analysis_txt_path = f"{defense_folder}/analysis.txt"
+
+        with open(analysis_txt_path, "w", encoding="utf-8") as f:
+            f.write(analysis_result)
+
+
+        # создаем PDF анализа
+        # создаем нормальный PDF анализа
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.lib.styles import ParagraphStyle
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import mm
+        from reportlab.lib.styles import getSampleStyleSheet
+
+        analysis_pdf_path = f"{defense_folder}/analysis.pdf"
+
+        styles = getSampleStyleSheet()
+
+        normal_style = ParagraphStyle(
+            "Normal",
+            parent=styles["Normal"],
+            fontName="TimesNewRoman",
+            fontSize=11,
+            leading=16
         )
+
+        title_style = ParagraphStyle(
+            "Title",
+            parent=styles["Normal"],
+            fontName="TimesNewRomanBold",
+            fontSize=14,
+            leading=20,
+            spaceAfter=10
+        )
+
+        elements = []
+
+        for line in analysis_result.split("\n"):
+
+            text = line.strip()
+
+            if not text:
+                elements.append(Spacer(1, 6))
+                continue
+
+            # заголовки
+            if text.startswith("#") or text.endswith(":"):
+
+                clean = text.replace("#", "").strip()
+
+                elements.append(Paragraph(clean, title_style))
+
+            else:
+
+                elements.append(Paragraph(text, normal_style))
+
+
+        doc = SimpleDocTemplate(
+            analysis_pdf_path,
+            pagesize=A4,
+            leftMargin=25 * mm,
+            rightMargin=25 * mm,
+            topMargin=20 * mm,
+            bottomMargin=20 * mm
+        )
+
+        doc.build(elements)
+
+
+        await update.message.reply_text("Анализ материалов завершен.")
+
+        with open(analysis_pdf_path, "rb") as f:
+            await update.message.reply_document(f)
 
         return
 
@@ -675,8 +779,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         context.user_data["state"] = None
 
+        build_case_context(case)
+
+        materials_folder = f"cases/{case}/materials"
+        files_count = len(os.listdir(materials_folder))
+
         await update.message.reply_text(
-            "Загрузка материалов завершена.",
+            f"Загрузка материалов завершена.\n"
+            f"Распознано документов: {files_count}",
             reply_markup=main_keyboard()
         )
 
@@ -1021,13 +1131,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             case_folder = f"cases/{case}"
 
             process_material(path, case_folder)
-
-            build_case_context(case)
-
-            await update.message.reply_text(
-                f"Материал сохранен и распознан: {file_name}"
-            )
-
+            
             return
 
         # фото
@@ -1047,13 +1151,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             case_folder = f"cases/{case}"
 
             process_material(path, case_folder)
-
-            build_case_context(case)
-
-            await update.message.reply_text(
-                "Фото материала сохранено и распознано."
-            )
-
+            
             return
     
 
