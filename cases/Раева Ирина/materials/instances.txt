@@ -1,0 +1,7 @@
+
+COURT_NAME: саратовский Районный суд
+COURT_ADDRESS: г. саратов, ул. мира д 4
+CASE_NUMBER:
+
+GIBDD_NAME: МрЭО ГИБДД №4
+GIBDD_ADDRESS: г. саратов, ул. советской армии д7

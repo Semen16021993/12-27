@@ -5,30 +5,23 @@ import os
 
 def generate_document(case, template_name, replacements):
 
-    template_path = f"templates/{template_name}.docx"
+    template_path = f"templates/{template_name}"
 
     doc = Document(template_path)
 
     # замена переменных
     for p in doc.paragraphs:
-
         for run in p.runs:
-
             for key, value in replacements.items():
-
                 if key in run.text:
-
                     run.text = run.text.replace(key, value)
 
     folder = f"cases/{case}/defense"
-
     os.makedirs(folder, exist_ok=True)
 
     docx_path = f"{folder}/{template_name}_{case}.docx"
 
     doc.save(docx_path)
-
-    # конвертация в PDF через LibreOffice
 
     subprocess.run([
         "/usr/local/bin/soffice",

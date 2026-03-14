@@ -12,6 +12,7 @@ from services.pdf_reader import read_pdf
 from services.knowledge_loader import load_knowledge
 from services.legal_analysis_prompt import LEGAL_ANALYSIS_PROMPT
 from services.passport_pipeline import process_passport
+from services.legal_document_builder import build_document
 
 from telegram import Update, ReplyKeyboardRemove
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
@@ -148,6 +149,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_text = update.message.text.lower().strip()
 
+
+    # -----------------------------------
+    # ожидаем специальную информацию
+    # -----------------------------------
+
+    if context.user_data.get("waiting_document_info"):
+
+        document_type = context.user_data.get("document_type")
+        case = context.user_data.get("case")
+
+        user_input = update.message.text
+
+        await update.message.reply_text("Готовлю документ...")
+
+        docx_path, pdf_path = build_document(
+            case,
+            document_type,
+            user_input
+        )
+
+        with open(pdf_path, "rb") as f:
+            await update.message.reply_document(f)
+
+        with open(docx_path, "rb") as f:
+            await update.message.reply_document(f)
+
+        context.user_data["waiting_document_info"] = False
+
+        return
 
     # -----------------------------------
     # подтверждение паспорта
@@ -831,36 +861,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             return
 
+        context.user_data["document_type"] = user_text
+        context.user_data["waiting_document_info"] = True
+
         await update.message.reply_text(
-            f"Формирую документ: {user_text}"
+            "Введите специальную информацию для документа."
         )
-
-        template = DOCUMENTS[user_text]["template"]
-
-        # пока без подстановок
-        replacements = {}
-
-        try:
-
-            docx_path, pdf_path = generate_document(
-                case,
-                template,
-                replacements
-            )
-
-            with open(docx_path, "rb") as f:
-                await update.message.reply_document(f)
-
-            with open(pdf_path, "rb") as f:
-                await update.message.reply_document(f)
-
-        except Exception as e:
-
-            print(e)
-
-            await update.message.reply_text(
-                "Ошибка генерации документа"
-            )
 
         return
    
