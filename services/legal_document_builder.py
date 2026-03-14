@@ -59,7 +59,12 @@ def build_document(case, document_type, user_text):
 
     # получаем шаблон
 
-    template_name = DOCUMENTS[document_type]["template"]
+    template = DOCUMENTS.get(document_type)
+
+    if not template:
+        raise Exception(f"Шаблон для документа не найден: {document_type}")
+
+    template_name = template["template"]
 
     # читаем данные клиента
 
@@ -67,7 +72,7 @@ def build_document(case, document_type, user_text):
 
     # читаем данные суда
 
-    instances = read_instances(case)
+    instances = read_instances(case) or {}
 
     # -----------------------------------
     # GPT форматирование данных
@@ -96,12 +101,13 @@ def build_document(case, document_type, user_text):
     # генерируем BODY через GPT
 
     body = generate_document_body(
-
         case=case,
         document_type=document_type,
         user_text=user_text
-
     )
+
+    if not body:
+        body = " "
 
     replacements = {
 
@@ -109,9 +115,9 @@ def build_document(case, document_type, user_text):
         "{{CLIENT_NAME_GEN}}": formatted_data.get("CLIENT_NAME_GEN", ""),
         "{{CLIENT_SIGNATURE}}": formatted_data.get("CLIENT_SIGNATURE", ""),
 
-        "{{CLIENT_ADDRESS}}": client_data["CLIENT_ADDRESS"],
-        "{{PHONE}}": client_data["PHONE"],
-        "{{EMAIL}}": client_data["EMAIL"],  
+        "{{CLIENT_ADDRESS}}": client_data.get("CLIENT_ADDRESS", ""),
+        "{{PHONE}}": client_data.get("PHONE", ""),
+        "{{EMAIL}}": client_data.get("EMAIL", ""),  
 
         "{{COURT_NAME}}": formatted_data.get("COURT_NAME", instances["COURT_NAME"]),
         "{{COURT_ADDRESS}}": formatted_data.get("COURT_ADDRESS", instances["COURT_ADDRESS"]),

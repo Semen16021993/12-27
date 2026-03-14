@@ -1,6 +1,8 @@
 import os
 from openai import OpenAI
 from config import OPENAI_API_KEY
+from services.document_examples_loader import load_document_examples
+from services.document_prompts import DOCUMENT_PROMPTS
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -49,16 +51,15 @@ def generate_document_body(case, document_type, user_text):
 
     context = read_file(f"{base}/case_context.txt")
 
-    example = ""
+    example = load_document_examples(document_type)
 
-    example_path = f"knowledge_documents/{document_type}.txt"
-
-    if os.path.exists(example_path):
-
-        example = read_file(example_path)
+    document_prompt = DOCUMENT_PROMPTS.get(document_type, "")
 
     prompt = f"""
 Тип документа: {document_type}
+
+Инструкция по написанию документа:
+{document_prompt}
 
 Специальная информация от юриста:
 {user_text}
@@ -69,15 +70,36 @@ def generate_document_body(case, document_type, user_text):
 Материалы дела:
 {materials}
 
-Пример аналогичного документа:
+Примеры аналогичных документов:
 {example}
 
 Напиши только основной текст документа,
-который должен быть вставлен в шаблон.
+который будет вставлен в шаблон.
 
-Не добавляй заголовков и реквизитов.
-Не пиши "ХОДАТАЙСТВО" или "В мировой суд".
-Напиши только аргументацию.
+Твоя задача выполнить работу в три шага.
+
+ШАГ 1.
+Кратко выдели юридически значимые обстоятельства дела
+(что произошло, характер ДТП, поведение водителя, последствия).
+
+ШАГ 2.
+Определи нашу юридическую позицию защиты по делу
+и основные аргументы, которые следует использовать.
+
+ШАГ 3.
+На основе этого напиши основной текст документа.
+
+ВАЖНО:
+
+Выведи только результат ШАГА 3 — текст документа
+
+Не добавляй:
+— заголовок документа
+— реквизиты суда
+— реквизиты ГИБДД
+— подпись
+
+Пиши только юридическую аргументацию.
 """
 
     response = client.chat.completions.create(

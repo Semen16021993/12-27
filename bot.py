@@ -1,8 +1,6 @@
 from dotenv import load_dotenv
 load_dotenv()
 from services.contract_generator import generate_contract
-from services.document_generator import generate_document
-from services.document_registry import DOCUMENTS
 from services.questionnaire_parser import parse_questionnaire
 from services.instances_parser import update_instances
 from services.case_context_builder import build_case_context
@@ -13,6 +11,7 @@ from services.knowledge_loader import load_knowledge
 from services.legal_analysis_prompt import LEGAL_ANALYSIS_PROMPT
 from services.passport_pipeline import process_passport
 from services.legal_document_builder import build_document
+from services.document_mapper import DOCUMENT_MAP
 
 from telegram import Update, ReplyKeyboardRemove
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
@@ -849,7 +848,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # универсальная генерация документов
     # -----------------------------------
 
-    if user_text in DOCUMENTS:
+    if user_text in DOCUMENT_MAP:
 
         case = context.user_data.get("case")
 
@@ -861,7 +860,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             return
 
-        context.user_data["document_type"] = user_text
+        context.user_data["document_type"] = DOCUMENT_MAP[user_text]
         context.user_data["waiting_document_info"] = True
 
         await update.message.reply_text(

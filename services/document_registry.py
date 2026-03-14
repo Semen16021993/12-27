@@ -4,68 +4,68 @@ DOCUMENTS = {
     # ХОДАТАЙСТВА
     # ----------------------------
 
-    "ознакомление гибдд": {
+    "oznakomlenie_gibdd": {
         "template": "oznakomlenie_gibdd.docx"
     },
 
-    "ознакомление суд": {
+    "oznakomlenie_sud": {
         "template": "oznakomlenie_sud.docx"
     },
 
-    "перенос гибдд": {
+    "perenos_gibdd": {
         "template": "perenos_gibdd.docx"
     },
 
-    "перенос суд": {
+    "perenos_sud": {
         "template": "perenos_sud.docx"
     },
 
-    "прекращение гибдд": {
-        "template": "test.docx"
+    "prekrashenie_gibdd": {
+        "template": "prekrashenie_gibdd.docx"
     },
 
-    "прекращение суд": {
+    "prekrashenie_sud": {
         "template": "prekrashenie_sud.docx"
     },
 
-    "малозначительность": {
-        "template": "malosn.docx"
+    "maloznachitelnost": {
+        "template": "maloznachitelnost.docx"
     },
 
-    "крайняя необходимость": {
-        "template": "kraynyaya.docx"
+    "kraynyaya_neobhodimost": {
+        "template": "kraynyaya_neobhodimost.docx"
     },
 
-    "проведение экспертизы": {
+    "expertiza": {
         "template": "expertiza.docx"
     },
 
 
     # ----------------------------
-    # ДРУГИЕ ДОКУМЕНТЫ
+    # ПРОЧИЕ ДОКУМЕНТЫ
     # ----------------------------
 
-    "объяснительная": {
+    "obyasnitelnaya": {
         "template": "obyasnitelnaya.docx"
     },
 
-    "расписка": {
+    "raspiska": {
         "template": "raspiska.docx"
     },
 
-    "правовое заключение": {
+    "pravovoe_zakl": {
         "template": "pravovoe_zakl.docx"
     },
 
-    "отзыв": {
+    "otzyv": {
         "template": "otzyv.docx"
     },
 
-    "судебная речь": {
+    "sud_rech": {
         "template": "sud_rech.docx"
     },
 
-    "обжалование": {
+    "obzhalovanie": {
         "template": "obzhalovanie.docx"
     }
 
