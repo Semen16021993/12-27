@@ -19,7 +19,10 @@ def generate_document(case, template_name, replacements):
     folder = f"cases/{case}/defense"
     os.makedirs(folder, exist_ok=True)
 
-    docx_path = f"{folder}/{template_name}_{case}.docx"
+    # имя файла без двойных расширений
+    base_name = template_name.replace(".docx", "")
+
+    docx_path = f"{folder}/{base_name} {case}.docx"
 
     doc.save(docx_path)
 
@@ -33,6 +36,6 @@ def generate_document(case, template_name, replacements):
         docx_path
     ], check=True)
 
-    pdf_path = docx_path.replace(".docx", ".pdf")
+    pdf_path = f"{folder}/{base_name} {case}.pdf"
 
     return docx_path, pdf_path
