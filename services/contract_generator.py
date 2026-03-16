@@ -2,6 +2,7 @@ import os
 from docx import Document
 import subprocess
 from datetime import datetime
+import random
 
 
 def parse_client_data(case):
@@ -34,7 +35,7 @@ def make_signature(fio):
     return f"{parts[0]} {parts[1][0]}.{parts[2][0]}."
 
 
-def generate_contract(case):
+def generate_contract(case, services_text, price):
 
     data = parse_client_data(case)
 
@@ -59,17 +60,25 @@ def generate_contract(case):
     month = months[now.month]
     year = now.year
 
-    # считаем номер договора
+    # генерируем номер договора (5 случайных цифр)
 
-    folder = "cases"
-    count = 0
+    # -----------------------------------
+    # номер договора
+    # -----------------------------------
 
-    for root, dirs, files in os.walk(folder):
-        for file in files:
-            if file.startswith("договор") and str(year)[-2:] in file:
-                count += 1
+    number_file = f"cases/{case}/contract_number.txt"
 
-    number = f"{count + 1}/{now.month:02d}-{str(year)[-2:]}"
+    if os.path.exists(number_file):
+
+        with open(number_file, "r", encoding="utf-8") as f:
+            number = f.read().strip()
+
+    else:
+
+        number = str(random.randint(10000, 99999))
+
+        with open(number_file, "w", encoding="utf-8") as f:
+            f.write(number)
 
     signature = make_signature(data["ФИО"])
 
@@ -97,6 +106,9 @@ def generate_contract(case):
 
         "{{Email}}": data["Email"],
         "{{Телефон}}": data["Телефон"],
+
+        "{{Перечень_услуг}}": services_text,
+        "{{Стоимость}}": price,
 
         "{{ФИО_подпись}}": signature
     }

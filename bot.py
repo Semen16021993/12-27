@@ -179,6 +179,106 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # -----------------------------------
+    # ввод услуг и стоимости для договора
+    # -----------------------------------
+
+    if context.user_data.get("state") == "WAIT_CONTRACT_DATA":
+
+        case = context.user_data.get("case")
+
+        user_input = update.message.text
+
+        await update.message.reply_text("Формирую договор...")
+
+        response = client.chat.completions.create(
+
+            model="gpt-4o-mini",
+            temperature=0,
+
+            messages=[
+                {
+                    "role": "system",
+                    "content": """
+    Ты помощник юриста.
+
+    Из текста пользователя нужно:
+
+    1. Сформировать перечень услуг для спецификации договора.
+    2. Нумерация должна быть строго:
+
+    1.1 ...
+    1.2 ...
+    1.3 ...
+
+    3. Выделить стоимость договора.
+
+    Верни строго в формате:
+
+    УСЛУГИ:
+    1.1 ...
+    1.2 ...
+    1.3 ...
+
+    СТОИМОСТЬ:
+    40 000 (сорок тысяч)
+    """
+                },
+                {
+                    "role": "user",
+                    "content": user_input
+                }
+            ]
+        )
+
+        result = response.choices[0].message.content
+
+        services_text = ""
+        price = ""
+
+        lines = result.split("\n")
+
+        mode = None
+
+        for line in lines:
+
+            line = line.strip()
+
+            if line.startswith("УСЛУГИ"):
+                mode = "services"
+                continue
+
+            if line.startswith("СТОИМОСТЬ"):
+                mode = "price"
+                continue
+
+            if mode == "services":
+                services_text += line + "\n\n"
+
+            if mode == "price" and line:
+                price = line
+
+        try:
+
+            docx_path, pdf_path = generate_contract(case, services_text, price)
+
+            await update.message.reply_text("Договор сформирован.")
+
+            with open(docx_path, "rb") as f:
+                await update.message.reply_document(f)
+
+            with open(pdf_path, "rb") as f:
+                await update.message.reply_document(f)
+
+        except Exception as e:
+
+            print(e)
+
+            await update.message.reply_text("Ошибка генерации договора.")
+
+        context.user_data["state"] = None
+
+        return
+    # -----------------------------------
     # подтверждение паспорта
     # -----------------------------------
 
@@ -808,15 +908,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         try:
 
-            docx_path, pdf_path = generate_contract(case)
+            context.user_data["state"] = "WAIT_CONTRACT_DATA"
 
-            await update.message.reply_text("Договор сформирован.")
+            await update.message.reply_text(
+                "Напишите перечень услуг и стоимость договора.\n\n"
+            )
 
-            with open(docx_path, "rb") as f:
-                await update.message.reply_document(f)
-
-            with open(pdf_path, "rb") as f:
-                await update.message.reply_document(f)
+            return
 
         except Exception as e:
 
