@@ -7,7 +7,7 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # ОСНОВНЫЕ ПАПКИ ПРОЕКТА
-CASES_FOLDER = "cases"
+CASES_FOLDER = os.getenv("CASES_FOLDER", "cases")
 RAG_FOLDER = "rag"
 
 # Разрешенные пользователи Telegram

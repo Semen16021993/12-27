@@ -1,5 +1,8 @@
+import os
 from dotenv import load_dotenv
-load_dotenv()
+
+env_file = os.getenv("ENV_FILE", ".env")
+load_dotenv(env_file)
 from services.contract_generator import generate_contract
 from services.questionnaire_parser import parse_questionnaire
 from services.instances_parser import update_instances
@@ -28,7 +31,6 @@ from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-import os
 import base64
 import uuid
 
