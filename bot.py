@@ -46,9 +46,9 @@ if Path("/System/Library/Fonts/Supplemental/Times New Roman.ttf").exists():
     REGULAR_FONT = "/System/Library/Fonts/Supplemental/Times New Roman.ttf"
     BOLD_FONT = "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf"
 
-elif Path("/usr/share/fonts/truetype/liberation2/LiberationSerif-Regular.ttf").exists():
+elif Path("/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf").exists():
     REGULAR_FONT = "/usr/share/fonts/truetype/liberation2/LiberationSerif-Regular.ttf"
-    BOLD_FONT = "/usr/share/fonts/truetype/liberation2/LiberationSerif-Bold.ttf"
+    BOLD_FONT = "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf"
 
 else:
     raise RuntimeError("Не найден подходящий шрифт.")
