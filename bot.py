@@ -40,19 +40,25 @@ print("База знаний загружена")
 print(len(knowledge_base))
 
 
-# регистрируем шрифт один раз
+from pathlib import Path
+
+if Path("/System/Library/Fonts/Supplemental/Times New Roman.ttf").exists():
+    REGULAR_FONT = "/System/Library/Fonts/Supplemental/Times New Roman.ttf"
+    BOLD_FONT = "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf"
+
+elif Path("/usr/share/fonts/truetype/liberation2/LiberationSerif-Regular.ttf").exists():
+    REGULAR_FONT = "/usr/share/fonts/truetype/liberation2/LiberationSerif-Regular.ttf"
+    BOLD_FONT = "/usr/share/fonts/truetype/liberation2/LiberationSerif-Bold.ttf"
+
+else:
+    raise RuntimeError("Не найден подходящий шрифт.")
+
 pdfmetrics.registerFont(
-    TTFont(
-        "TimesNewRoman",
-        "/System/Library/Fonts/Supplemental/Times New Roman.ttf"
-    )
+    TTFont("TimesNewRoman", REGULAR_FONT)
 )
 
 pdfmetrics.registerFont(
-    TTFont(
-        "TimesNewRomanBold",
-        "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf"
-    )
+    TTFont("TimesNewRomanBold", BOLD_FONT)
 )
 
 
