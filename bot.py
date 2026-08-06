@@ -32,12 +32,17 @@ import os
 import base64
 import uuid
 
+from config import ALLOWED_USERS
+
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 knowledge_base = load_knowledge()
 
 print("База знаний загружена")
 print(len(knowledge_base))
+
+def is_allowed(update):
+    return update.effective_user.id in ALLOWED_USERS
 
 
 from pathlib import Path
@@ -106,6 +111,18 @@ def create_pdf(text, case_name):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+    if not is_allowed(update):
+        print(
+            f"Попытка доступа: "
+            f"{update.effective_user.full_name} "
+            f"({update.effective_user.id})"
+        )
+
+        await update.message.reply_text(
+            "⛔ У вас нет доступа к этому боту."
+        )
+        return
+
     await update.message.reply_text(
         "AI Lawyer запущен. Выберите действие:",
         reply_markup=main_keyboard()
@@ -148,6 +165,11 @@ Email:
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_allowed(update):
+        print(f"Попытка доступа: {update.effective_user.full_name} ({update.effective_user.id})")
+        await update.message.reply_text("⛔ У вас нет доступа к этому боту.")
+        return
 
     if not update.message or not update.message.text:
         return
@@ -1011,6 +1033,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_allowed(update):
+        print(f"Попытка доступа: {update.effective_user.full_name} ({update.effective_user.id})")
+        await update.message.reply_text("⛔ У вас нет доступа к этому боту.")
+        return
 
     case = context.user_data.get("case")
 
