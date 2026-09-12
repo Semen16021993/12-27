@@ -152,8 +152,15 @@ def normalize_contacts(text):
 Email:
 Телефон:
 
-Телефон приведи к формату:
+Телефон всегда приводи строго к формату:
 +7 XXX XXX XXXX
+
+Примеры:
+89080533502 -> +7 908 053 3502
+79080533502 -> +7 908 053 3502
+9080533502 -> +7 908 053 3502
+8 908 053 35 02 -> +7 908 053 3502
++7(908)053-35-02 -> +7 908 053 3502
 """
             },
             {
@@ -164,6 +171,26 @@ Email:
     )
 
     return response.choices[0].message.content
+
+def normalize_client_card(text):
+
+    lines = [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip()
+    ]
+
+    result = []
+
+    for line in lines:
+
+        if line.startswith("Email:"):
+            if result and result[-1] != "":
+                result.append("")
+
+        result.append(line)
+
+    return "\n".join(result).strip()
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -314,14 +341,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if context.user_data.get("state") == "WAIT_PASSPORT_CONFIRM":
 
-        if user_text.lower() == "подтверждаю":
+        if user_text == "подтверждаю":
 
-            context.user_data["state"] = "WAIT_CONTACT"
+            final_data = normalize_client_card(
+                context.user_data.get("final_data", "")
+            )
+            case = context.user_data.get("case")
+
+            path = f"cases/{case}/passport/client_data.txt"
+
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(final_data)
+
+            context.user_data["state"] = None
+
+            build_case_context(case)
 
             await update.message.reply_text(
-                "Введите телефон и email клиента\n"
-                "Можно в свободной форме",
-                reply_markup=ReplyKeyboardRemove()
+                "Данные клиента сохранены.",
+                reply_markup=main_keyboard()
             )
 
             return
@@ -346,69 +384,86 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         correction = update.message.text
 
-        passport_data = context.user_data.get("passport_data", "")
+        final_data = context.user_data.get("final_data", "")
 
         response = client.chat.completions.create(
 
             model="gpt-4o-mini",
             temperature=0,
-    
+
             messages=[
                 {
                     "role": "system",
                     "content": """
-                Ты редактор данных российского паспорта.
+    Ты редактор данных клиента.
 
-                Тебе дан список паспортных данных.
-                Пользователь пишет исправление в свободной форме.
+    Тебе дан полный список данных клиента.
+    Пользователь пишет исправление в свободной форме.
 
-                Примеры:
-                правильная фамилия Иванов
-                номер паспорта 123456
-                исправь дату рождения на 12.03.1985
+    Примеры:
+    правильная фамилия Иванов
+    номер паспорта 123456
+    исправь дату рождения на 12.03.1985
+    правильный email test@example.com
+    телефон +7 999 123 45 67
 
-                Твоя задача:
-                1. Понять какое поле нужно изменить
-                2. Изменить только это поле
-                3. Остальные данные оставить без изменений
+    Твоя задача:
+    1. Понять какое поле нужно изменить
+    2. Изменить только это поле
+    3. Остальные данные оставить без изменений
+    4. Телефон всегда возвращай строго в формате:
+    +7 XXX XXX XXXX
 
-                Верни строго в формате:
+    Даже если пользователь написал:
+    89080533502
+    79080533502
+    9080533502
+    8 908 053 35 02
+    +7(908)053-35-02
 
-                ФИО:
-                Пол:
-                Дата рождения:
-                Место рождения:
-                Серия:
-                Номер:
-                Кем выдан:
-                Дата выдачи:
-                Код подразделения:
-                Адрес регистрации:
-                """
-                }
-                ,
+    приводи номер к формату:
+    +7 908 053 3502
+
+    Верни строго в формате:
+
+    ФИО:
+    Пол:
+    Дата рождения:
+    Место рождения:
+    Серия:
+    Номер:
+    Кем выдан:
+    Дата выдачи:
+    Код подразделения:
+    Адрес регистрации:
+    Email:
+    Телефон:
+    """
+                },
                 {
                     "role": "user",
                     "content": f"""
-Данные паспорта:
+    Данные клиента:
 
-{passport_data}
+    {final_data}
 
-Исправление:
+    Исправление:
 
-{correction}
-"""
+    {correction}
+    """
                 }
             ]
         )
 
-        new_data = response.choices[0].message.content
+        new_data = normalize_client_card(
+            response.choices[0].message.content
+        )
 
-        context.user_data["passport_data"] = new_data
+        context.user_data["final_data"] = new_data
         context.user_data["state"] = "WAIT_PASSPORT_CONFIRM"
 
         await update.message.reply_text(
-            f"Обновленные данные:\n\n{new_data}",
+            f"Проверьте данные клиента:\n\n{new_data}",
             reply_markup=passport_confirm_keyboard()
         )
 
@@ -423,27 +478,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         contacts = normalize_contacts(update.message.text)
 
-        passport_data = context.user_data.get("passport_data")
+        passport_data = context.user_data.get("passport_data", "")
 
-        final_data = f"""
-{passport_data}
+        final_data = normalize_client_card(
+            f"{passport_data}\n{contacts}"
+        )
 
-{contacts}
-"""
-
-        case = context.user_data.get("case")
-
-        path = f"cases/{case}/passport/client_data.txt"
-
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(final_data)
-
-        context.user_data["state"] = None
-        build_case_context(case)
+        context.user_data["final_data"] = final_data
+        context.user_data["state"] = "WAIT_PASSPORT_CONFIRM"
 
         await update.message.reply_text(
-            f"Данные клиента сохранены:\n\n{final_data}",
-            reply_markup=main_keyboard()
+            f"Проверьте данные клиента:\n\n{final_data}",
+            reply_markup=passport_confirm_keyboard()
         )
 
         return
@@ -1157,11 +1203,12 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         passport_data = process_passport(files, case_folder)
 
         context.user_data["passport_data"] = passport_data
-        context.user_data["state"] = "WAIT_PASSPORT_CONFIRM"
+        context.user_data["state"] = "WAIT_CONTACT"
 
         await update.message.reply_text(
-            f"Проверьте данные паспорта:\n\n{passport_data}",
-            reply_markup=passport_confirm_keyboard()
+            "Введите телефон и email клиента\n"
+            "Можно в свободной форме",
+            reply_markup=ReplyKeyboardRemove()
         )
 
         return
